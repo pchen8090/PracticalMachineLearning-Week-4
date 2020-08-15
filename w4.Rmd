@@ -1,0 +1,108 @@
+---
+title: "Machine Learning Course Project: Prediction Assignment"
+output: html_document
+---
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).  
+
+## Goal
+The goal of your project is to predict the manner in which they did the exercise.  
+1. Preict "classe" variable in the training set with any of the other variables.  
+2. Describe how the model is built.  
+3. How cross validation is applied.  
+4. Expected out of sample error.   
+5. Why you made the choices you did.  
+6. use prediction model to predict 20 different test cases.  
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(caret)
+library(parallel)
+library(doParallel)
+
+```
+
+
+## Loading Data
+The training data for this project are available here:  
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv  
+
+The test data are available here:  
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv  
+
+In this dataset we have following categories:  
+exactly according to the specification (Class A)  
+throwing the elbows to the front (Class B)  
+lifting the dumbbell only halfway (Class C)  
+lowering the dumbbell only halfway (Class D)  
+throwing the hips to the front (Class E)  
+
+We will use the training data to predict the catagories in testing dataste.
+
+Note that data contains both NA and #DIV/0!.
+```{r read-data, cache=TRUE}
+training <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+
+set.seed(33)
+
+```
+
+The data loaded contains some unnessary information:  
+1, the first 7 column are not related with prediction at all.  
+2, the data contained a huge amount of NAs. Those columns should be filtered out.  
+
+```{r clean-data}
+
+training <- training[,-c(1:7)]
+testing <- testing[,-c(1:7)]
+training <- training[,colSums(is.na(training))==0]
+length(names(training))
+```
+
+Data we got now contains only 52 predictors.
+
+## Analyze
+Since this problem is clearly a classification problem, random forest & KNN are certainly than regression. I chose random forest to resolve this issue.  
+
+Also, I used 70% data to build the model and 30% data to do cross validation.  I except the out of sample error to be at least 95%.
+
+```{r, echo=FALSE, cache=TRUE}
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+```
+
+```{r, echo=TRUE, cache=TRUE}
+training_index <- createDataPartition(training$classe, p=0.7, list=F)
+training_data <- training[training_index,]
+test_data <- training[-training_index,]
+control <- trainControl(method="cv",number = 5,allowParallel = TRUE)
+rf_model <- train(classe~., data=training_data, method="rf",trControl=control)
+print(rf_model)
+```
+
+```{r, echo=FALSE, cache=TRUE}
+stopCluster(cluster)
+registerDoSEQ()
+
+```
+
+The model gave ~99% Accuracy for mtry=2, which means that the model is accurate. So, I expect the out of sample error to be low (accuracy > 95%).
+
+```{r predict-with-test-data}
+test_p <- predict(rf_model,test_data)
+
+confusionMatrix(test_p, test_data$classe)
+```
+
+## Result
+
+We can see that the Accuracy is 0.9939. We can safely apply it to test data. The result for 20 tests is:
+
+```{r prediction}
+predict(rf_model,testing)
+```
